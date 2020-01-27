@@ -312,6 +312,8 @@ def test(epoch):
     
     start = time.time()
     # compute the similarity
+    gall_feat = 1.*gall_feat/np.repeat(np.linalg.norm(gall_feat,2,1,True),gall_feat.shape[1],1)
+    query_feat = 1.*query_feat/np.repeat(np.linalg.norm(query_feat,2,1,True),query_feat.shape[1],1)
     distmat  = np.matmul(query_feat, np.transpose(gall_feat))
     
     # evaluation

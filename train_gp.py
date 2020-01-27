@@ -34,7 +34,7 @@ parser.add_argument('--model_path', default='./save_model/', type=str,
                     help='model save path')
 parser.add_argument('--save_epoch', default=20, type=int,
                     metavar='s', help='save model every 10 epochs')
-parser.add_argument('--log_path', default='log/', type=str, 
+parser.add_argument('--log_path', default='log_part/', type=str, 
                     help='log save path')
 parser.add_argument('--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
@@ -220,6 +220,7 @@ def train(epoch):
     batch_time = AverageMeter()
     correct = 0
     total = 0
+    parts_num = 6
     #New
     tripletloss_global = TripletLoss(32,4,cross_modal = False)
     tripletloss_cross = TripletLoss(32,4,cross_modal = True)
@@ -241,7 +242,7 @@ def train(epoch):
 
 
         data_time.update(time.time() - end)
-        outputs,feat,_ = net(input1, input2)
+        outputs,feat,outputs_part,feat_part = net(input1, input2)
         if args.method =='id':
             loss = criterion(outputs, labels)
             #Klloss
@@ -251,10 +252,15 @@ def train(epoch):
             #outputs_rgb2 = softmax(outputs_rgb)
             #KLLoss2 = klloss(outputs_ir2,outputs_rgb2)
             score = softmax(outputs)
+            for i in range(parts_num):
+                score = score + softmax(outputs_part[i])
             _, predicted = torch.max(score.data, 1)
             correct += predicted.eq(labels).sum().item()
         #feat = 1.*feat / (torch.norm(feat, 2, 1, keepdim=True).expand_as(feat) + 1e-10)
-        triloss = tripletloss_cross(feat,labels) + tripletloss_global(feat,labels)
+        triloss = 0.0
+        for i in range(parts_num):
+            triloss = triloss + tripletloss_cross(feat_part[i],labels) + tripletloss_global(feat_part[i],labels)
+        triloss = triloss + tripletloss_cross(feat,labels) + tripletloss_global(feat,labels)
         loss = triloss + loss
 
         optimizer.zero_grad()    
@@ -285,13 +291,15 @@ def test(epoch):
     print ('Extracting Gallery Feature...')
     start = time.time()
     ptr = 0
-    gall_feat = np.zeros((ngall, 2048))
+    gall_feat = np.zeros((ngall, 2048*7))
     with torch.no_grad():
         for batch_idx, (input, label ) in enumerate(gall_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat = net(input, input, test_mode[0])
-            gall_feat[ptr:ptr+batch_num,: ] = feat.detach().cpu().numpy()
+            feat,feat_part = net(input, input, test_mode[0])
+            feat_temp = torch.cat(feat_part,1)
+            feat_temp = torch.cat((feat_part,feat),1)
+            gall_feat[ptr:ptr+batch_num,: ] = feat_temp.detach().cpu().numpy()
             ptr = ptr + batch_num
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))   
 
@@ -300,13 +308,15 @@ def test(epoch):
     print ('Extracting Query Feature...')
     start = time.time()
     ptr = 0
-    query_feat = np.zeros((nquery, 2048))
+    query_feat = np.zeros((nquery, 2048*7))
     with torch.no_grad():
         for batch_idx, (input, label ) in enumerate(query_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat = net(input, input, test_mode[1])
-            query_feat[ptr:ptr+batch_num,: ] = feat.detach().cpu().numpy()
+            feat_part = net(input, input, test_mode[1])
+            feat_temp = torch.cat(feat_part,1)
+            feat_temp = torch.cat((feat_part,feat),1)
+            query_feat[ptr:ptr+batch_num,: ] = feat_temp.detach().cpu().numpy()
             ptr = ptr + batch_num         
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))
     
@@ -361,7 +371,7 @@ for epoch in range(start_epoch, 121-start_epoch):
                 'mAP': mAP,
                 'epoch': epoch,
             }
-            torch.save(state, checkpoint_path + suffix + 'origin_origin_best.t')
+            torch.save(state, checkpoint_path + suffix + 'origin_part_best.t')
         
         # save model every 20 epochs    
         if epoch > 10 and epoch%10 ==0:
@@ -371,5 +381,5 @@ for epoch in range(start_epoch, 121-start_epoch):
                 'mAP': mAP,
                 'epoch': epoch,
             }
-            torch.save(state, checkpoint_path + suffix + 'origin_origin_epoch_{}.t'.format(epoch))
+            torch.save(state, checkpoint_path + suffix + 'origin_part_epoch_{}.t'.format(epoch))
         

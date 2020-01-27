@@ -19,6 +19,21 @@ class Normalize(nn.Module):
 # #####################################################################
 
 
+class PartBlock(nn.Module):
+    def __init__(self):
+        super(PartBlock, self).__init__()
+        self.bn = nn.BatchNorm1d(2048)
+        self.bn.apply(weights_init_kaiming)
+        self.fc = nn.Linear(2048, 395)
+        self.fc.apply(weights_init_classifier)
+        return
+
+    def forward(self, xt):
+        xi = self.bn(xt)
+        out = self.fc(xi)
+        return xi, out
+
+
 def weights_init_kaiming(m):
     classname = m.__class__.__name__
     # print(classname)
@@ -83,25 +98,27 @@ class embed_net(nn.Module):
         self.bn.apply(weights_init_kaiming)
         self.fc = nn.Linear(2048, 395)
         self.fc.apply(weights_init_classifier)
+        self.parts_num = 6
+        for i in range(self.parts_num):
+            setattr(self, 'part'+str(i), PartBlock())
 
     def forward(self, x1, x2, modal=0, epoch=0):
-        if modal == 0:
-            x = torch.cat((x1, x2), 0)
-            yt = self.visible_net(x)
-            yi = self.bn(yt)
-            out = self.fc(yi)
-
-        elif modal == 1:
-            yt = self.visible_net(x1)
-            yi = self.bn(yt)
-        elif modal == 2:
-            yt = self.visible_net(x2)
-            yi = self.bn(yt)
-
+        x = torch.cat((x1, x2), 0)
+        yt, yt_part = self.visible_net(x)
+        yi = self.bn(yt)
+        out = self.fc(yi)
+        yi_part = []
+        out_part = []
+        for i in range(self.parts_num):
+            p = getattr(self, 'part'+str(i))
+            part = torch.squeeze(yt_part[:, :, i])
+            yi_temp, out_temp = p(part)
+            yi_part.append(yi_temp)
+            out_part.append(out_temp)
         if self.training:
-            return out, yt, yi
+            return out, yt, out_part, yt_part
         else:
-            return yi
+            return yi, yi_part
 
 
 # debug model structure

@@ -32,14 +32,14 @@ class WLoss(nn.Module):
         for i in range(n):
             if i >= (n / 2):
                 dist_ap.append(
-                    self.margin - dist[i][mask[i]][0:self.num_instances].max().unsqueeze(0))
+                    self.margin - dist[i][mask[i]][0:self.num_instances].min().unsqueeze(0))
                 dist_an.append(
-                    self.margin - dist[i][mask[i] == 0][0:self.batchsize-self.num_instances].max().unsqueeze(0))
+                    self.margin - dist[i][mask[i] == 0][0:self.batchsize-self.num_instances].min().unsqueeze(0))
             else:
                 dist_ap.append(
-                    self.margin - dist[i][mask[i]][self.num_instances:].max().unsqueeze(0))
+                    self.margin - dist[i][mask[i]][self.num_instances:].min().unsqueeze(0))
                 dist_an.append(
-                    self.margin - dist[i][mask[i] == 0][self.batchsize-self.num_instances:].max().unsqueeze(0))
+                    self.margin - dist[i][mask[i] == 0][self.batchsize-self.num_instances:].min().unsqueeze(0))
         dist_ap = torch.cat(dist_ap)
         dist_an = torch.cat(dist_an)
         y = torch.zeros_like(dist_an)

@@ -240,6 +240,10 @@ elif dataset == 'sysu':
 
         gall_feat, gall_feat_pool = extract_gall_feat(trial_gall_loader)
 
+        gall_feat = 1.*gall_feat/np.repeat(np.linalg.norm(gall_feat,2,1,True),gall_feat.shape[1],1)
+        gall_feat_pool = 1.*gall_feat_pool/np.repeat(np.linalg.norm(gall_feat_pool,2,1,True),gall_feat_pool.shape[1],1)
+        query_feat = 1.*query_feat/np.repeat(np.linalg.norm(query_feat,2,1,True),query_feat.shape[1],1)
+        query_feat_pool = 1.*query_feat_pool/np.repeat(np.linalg.norm(query_feat_pool,2,1,True),query_feat_pool.shape[1],1)
         # fc feature
         distmat = np.matmul(query_feat, np.transpose(gall_feat))
         cmc, mAP = eval_sysu(-distmat, query_label,

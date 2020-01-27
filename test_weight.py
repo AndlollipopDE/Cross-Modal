@@ -13,8 +13,11 @@ import torchvision.transforms as transforms
 from data_loader import SYSUData, RegDBData, TestData
 from data_manager import *
 from eval_metrics import eval_sysu, eval_regdb
-#from model import embed_net
-from model_gp import embed_net
+from model import embed_net
+#from model_pashared import embed_net
+#from model_bnneck import embed_net
+#from model_split import embed_net
+#from model_sharebb import embed_net
 from utils import *
 import time
 import scipy.io as scio
@@ -169,18 +172,15 @@ def extract_gall_feat(gall_loader):
     print('Extracting Gallery Feature...')
     start = time.time()
     ptr = 0
-    gall_feat = np.zeros((ngall, 2048*7))
-    gall_feat_pool = np.zeros((ngall, 2048*7))
+    gall_feat = np.zeros((ngall, 2047))
+    gall_feat_pool = np.zeros((ngall, 2047))
     with torch.no_grad():
         for batch_idx, (input, label) in enumerate(gall_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat, feat_part = net(input, input, test_mode[0])
-            feat_temp = torch.cat(feat_part, 1)
-            feat_temp = torch.cat((feat_part, feat), 1)
-            gall_feat[ptr:ptr+batch_num, :] = feat_temp.detach().cpu().numpy()
-            gall_feat_pool[ptr:ptr+batch_num,
-                           :] = feat_temp.detach().cpu().numpy()
+            feat = net(input, input, test_mode[0])
+            gall_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
+            gall_feat_pool[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))
     return gall_feat, gall_feat_pool
@@ -191,18 +191,15 @@ def extract_query_feat(query_loader):
     print('Extracting Query Feature...')
     start = time.time()
     ptr = 0
-    query_feat = np.zeros((nquery, 2048))
-    query_feat_pool = np.zeros((nquery, 2048))
+    query_feat = np.zeros((nquery, 2047))
+    query_feat_pool = np.zeros((nquery, 2047))
     with torch.no_grad():
         for batch_idx, (input, label) in enumerate(query_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat, feat_part = net(input, input, test_mode[1])
-            feat_temp = torch.cat(feat_part, 1)
-            feat_temp = torch.cat((feat_part, feat), 1)
-            query_feat[ptr:ptr+batch_num, :] = feat_temp.detach().cpu().numpy()
-            query_feat_pool[ptr:ptr+batch_num,
-                            :] = feat_temp.detach().cpu().numpy()
+            feat = net(input, input, test_mode[1])
+            query_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
+            query_feat_pool[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))
     return query_feat, query_feat_pool

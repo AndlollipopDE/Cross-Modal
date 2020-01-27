@@ -84,9 +84,9 @@ class embed_net(nn.Module):
             self.visible_net = visible_net_resnet(arch=arch)
             pool_dim = 2048
 
-        self.bn = nn.BatchNorm1d(2048)
+        self.bn = nn.BatchNorm1d(2047)
         self.bn.apply(weights_init_kaiming)
-        self.fc = nn.Linear(2048, 395)
+        self.fc = nn.Linear(2047, 395)
         self.fc.apply(weights_init_classifier)
 
     def forward(self, x1, x2, modal=0, epoch=0):

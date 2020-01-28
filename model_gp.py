@@ -103,7 +103,7 @@ class embed_net(nn.Module):
             setattr(self, 'part'+str(i), PartBlock())
 
     def forward(self, x1, x2, modal=0, epoch=0):
-        if model == 0:
+        if modal == 0:
             x = torch.cat((x1, x2), 0)
         else:
             x = x1

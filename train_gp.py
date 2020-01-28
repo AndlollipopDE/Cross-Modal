@@ -13,13 +13,13 @@ import torchvision.transforms as transforms
 from data_loader import SYSUData, RegDBData, TestData
 from data_manager import *
 from eval_metrics import eval_sysu, eval_regdb
-from model import embed_net
+from model_gp import embed_net
 #from model_weight import embed_net
 from utils import *
 from tripletloss import TripletLoss
 from RandomErasing import RandomErasing
 from idloss import CrossEntropySmooth
-from centerloss import CenterLoss
+#from centerloss import CenterLoss
 
 parser = argparse.ArgumentParser(description='PyTorch Cross-Modality Training')
 parser.add_argument('--dataset', default='sysu',  help='dataset name: regdb or sysu]')
@@ -259,7 +259,7 @@ def train(epoch):
         #feat = 1.*feat / (torch.norm(feat, 2, 1, keepdim=True).expand_as(feat) + 1e-10)
         triloss = 0.0
         for i in range(parts_num):
-            triloss = triloss + tripletloss_cross(feat_part[i],labels) + tripletloss_global(feat_part[i],labels)
+            triloss = triloss + tripletloss_cross(torch.squeeze(feat_part[:,:,i]),labels) + tripletloss_global(torch.squeeze(feat_part[:,:,i]),labels)
         triloss = triloss + tripletloss_cross(feat,labels) + tripletloss_global(feat,labels)
         loss = triloss + loss
 
@@ -298,7 +298,7 @@ def test(epoch):
             input = Variable(input.cuda())
             feat,feat_part = net(input, input, test_mode[0])
             feat_temp = torch.cat(feat_part,1)
-            feat_temp = torch.cat((feat_part,feat),1)
+            feat_temp = torch.cat((feat_temp,feat),1)
             gall_feat[ptr:ptr+batch_num,: ] = feat_temp.detach().cpu().numpy()
             ptr = ptr + batch_num
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))   
@@ -315,7 +315,7 @@ def test(epoch):
             input = Variable(input.cuda())
             feat_part = net(input, input, test_mode[1])
             feat_temp = torch.cat(feat_part,1)
-            feat_temp = torch.cat((feat_part,feat),1)
+            feat_temp = torch.cat((feat_temp,feat),1)
             query_feat[ptr:ptr+batch_num,: ] = feat_temp.detach().cpu().numpy()
             ptr = ptr + batch_num         
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))

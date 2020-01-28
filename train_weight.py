@@ -13,8 +13,7 @@ import torchvision.transforms as transforms
 from data_loader import SYSUData, RegDBData, TestData
 from data_manager import *
 from eval_metrics import eval_sysu, eval_regdb
-from model import embed_net
-#from model_weight import embed_net
+from model_weight import embed_net
 from utils import *
 from tripletloss import TripletLoss
 from RandomErasing import RandomErasing

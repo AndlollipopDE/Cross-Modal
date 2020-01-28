@@ -14,7 +14,6 @@ from data_loader import SYSUData, RegDBData, TestData
 from data_manager import *
 from eval_metrics import eval_sysu, eval_regdb
 from model_gp import embed_net
-#from model_weight import embed_net
 from utils import *
 from tripletloss import TripletLoss
 from RandomErasing import RandomErasing
@@ -313,7 +312,7 @@ def test(epoch):
         for batch_idx, (input, label ) in enumerate(query_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat_part = net(input, input, test_mode[1])
+            feat,feat_part = net(input, input, test_mode[1])
             feat_temp = torch.cat(feat_part,1)
             feat_temp = torch.cat((feat_temp,feat),1)
             query_feat[ptr:ptr+batch_num,: ] = feat_temp.detach().cpu().numpy()

@@ -13,11 +13,7 @@ import torchvision.transforms as transforms
 from data_loader import SYSUData, RegDBData, TestData
 from data_manager import *
 from eval_metrics import eval_sysu, eval_regdb
-from model import embed_net
-#from model_pashared import embed_net
-#from model_bnneck import embed_net
-#from model_split import embed_net
-#from model_sharebb import embed_net
+from model_weight import embed_net
 from utils import *
 import time
 import scipy.io as scio

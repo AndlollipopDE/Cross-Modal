@@ -41,9 +41,9 @@ def weights_init_classifier(m):
 
 
 # Define the ResNet18-based Model
-class visible_net_resnet(nn.Module):
+class backbone(nn.Module):
     def __init__(self, arch='resnet18'):
-        super(visible_net_resnet, self).__init__()
+        super(backbone, self).__init__()
         if arch == 'resnet18':
             model_ft = models.resnet18(pretrained=True)
         elif arch == 'resnet50':
@@ -54,7 +54,7 @@ class visible_net_resnet(nn.Module):
         model_ft.layer4[0].downsample[0].stride = (1, 1)
         self.visible = model_ft
         self.dropout = nn.Dropout(p=0.5)
-        #self.avgpool = nn.AdaptiveAvgPool2d((6,1))
+        # self.avgpool = nn.AdaptiveAvgPool2d((6,1))
 
     def forward(self, x):
         x = self.visible.conv1(x)
@@ -67,43 +67,71 @@ class visible_net_resnet(nn.Module):
         x = self.visible.layer4(x)
         x = self.visible.avgpool(x)
         x = x.view(x.size(0), x.size(1))
-        #x = self.dropout(x)
+        # x = self.dropout(x)
         return x
 
 
-class embed_net(nn.Module):
-    def __init__(self, low_dim, class_num, drop=0.5, arch='resnet50'):
-        super(embed_net, self).__init__()
-        if arch == 'resnet18':
-            self.visible_net = visible_net_resnet(arch=arch)
-            pool_dim = 512
+class backbone_weight(nn.Module):
+    def __init__(self, arch='resnet18')
+      super(backbone_weight, self).__init__()
+       if arch == 'resnet18':
+            model_ft = models.resnet18(pretrained=True)
         elif arch == 'resnet50':
-            self.visible_net = visible_net_resnet(arch=arch)
-            pool_dim = 2048
+            model_ft = models.resnet50(pretrained=True)
+        # avg pooling to global pooling
+        model_ft.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        model_ft.layer4[0].conv2.stride = (1, 1)
+        model_ft.layer4[0].downsample[0].stride = (1, 1)
+        self.visible = model_ft
+        self.dropout = nn.Dropout(p=0.5)
+        # self.avgpool = nn.AdaptiveAvgPool2d((6,1))
 
-        self.bn = nn.BatchNorm1d(2048)
+    def forward(self, x):
+        x = self.visible.conv1(x)
+        x = self.visible.bn1(x)
+        x = self.visible.relu(x)
+        x = self.visible.maxpool(x)
+        x = self.visible.layer1(x)
+        x = self.visible.layer2(x)
+        x = self.visible.layer3(x)
+        x = self.visible.layer4(x)
+        weight = x[:, -1, :, :]
+        weight = torch.unsqueeze(weight, 1)
+        x = torch.mul(x[:, :2047, :, :], weight)
+        x = self.visible.avgpool(x)
+        x = x.view(x.size(0), x.size(1))
+        # x = self.dropout(x)
+        return x, weight
+
+
+class embed_net(nn.Module):
+    def __init__(self, low_dim, class_num, drop=0.5, arch='resnet50',weight_flag = False):
+        super(embed_net, self).__init__()
+        self.weight = weight_flag
+        if self.weight:
+            self.backbone = backbone_weight(arch = arch)
+        else:
+            self.backbone = backbone(arch=arch)
+
+        self.dim = low_dim
+        self.bn = nn.BatchNorm1d(self.dim)
         self.bn.apply(weights_init_kaiming)
-        self.fc = nn.Linear(2048, 395)
+        self.fc = nn.Linear(self.dim, class_num)
         self.fc.apply(weights_init_classifier)
 
-    def forward(self, x1, x2, modal=0, epoch=0):
-        if modal == 0:
-            x = torch.cat((x1, x2), 0)
-            yt = self.visible_net(x)
-            yi = self.bn(yt)
-            out = self.fc(yi)
-
-        elif modal == 1:
-            yt = self.visible_net(x1)
-            yi = self.bn(yt)
-        elif modal == 2:
-            yt = self.visible_net(x2)
-            yi = self.bn(yt)
-
-        if self.training:
-            return out, yt, yi
+    def forward(self, x1):
+        if self.weight:
+            yt,w = self.backbone(x1)
         else:
-            return yi
+            yt = self.backbone(x1)
+        yi = self.bn(yt)
+        out = self.fc(yi)
+        if self.weight:
+            return out,yt,yi,w
+        else:
+            return out,yt,yi
+
+
 
 
 # debug model structure

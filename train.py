@@ -19,6 +19,7 @@ from tripletloss import TripletLoss
 from RandomErasing import RandomErasing
 from idloss import CrossEntropySmooth
 from centerloss import CenterLoss
+from wloss import WLoss
 
 parser = argparse.ArgumentParser(description='PyTorch Cross-Modality Training')
 parser.add_argument('--dataset', default='sysu',  help='dataset name: regdb or sysu]')
@@ -56,11 +57,17 @@ parser.add_argument('--trial', default=1, type=int,
 parser.add_argument('--gpu', default='0', type=str,
                       help='gpu device ids for CUDA_VISIBLE_DEVICES')
 parser.add_argument('--mode', default='all', type=str, help='all or indoor')
+parser.add_argument('--use_weight',action='store_true',help='if use weight')
 
 args = parser.parse_args() 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 np.random.seed(0)
 
+if_weight = arg.use_weight
+if if_weight:
+    final_dim = 2047
+else:
+    final_dim = 2048
 dataset = args.dataset
 if dataset == 'sysu':
     data_path = './SYSUMM01/'
@@ -163,7 +170,7 @@ print('Data Loading Time:\t {:.3f}'.format(time.time()-end))
 
 
 print('==> Building model..')
-net = embed_net(args.low_dim, n_class, drop = args.drop, arch=args.arch)
+net = embed_net(final_dim, n_class, drop = args.drop, arch=args.arch,weight_flag=if_weight)
 net.to(device)
 cudnn.benchmark = True
 
@@ -180,7 +187,7 @@ if len(args.resume)>0:
         print('==> no checkpoint found at {}'.format(args.resume))
 
 if args.method =='id':
-    criterion = CrossEntropySmooth(395)
+    criterion = CrossEntropySmooth(n_class)
     #criterion = nn.CrossEntropyLoss()
     criterion.to(device)
 
@@ -220,12 +227,14 @@ def train(epoch):
     correct = 0
     total = 0
     #New
-    tripletloss_global = TripletLoss(32,4,cross_modal = False)
-    tripletloss_cross = TripletLoss(32,4,cross_modal = True)
+    tripletloss_global = TripletLoss(args.batchsize,4,cross_modal = False)
+    tripletloss_cross = TripletLoss(args.batchsize,4,cross_modal = True)
     #klloss = nn.KLDivLoss(size_average = False)
     #centerloss = CenterLoss(395,2048)
     #logsoftmax = nn.LogSoftmax(dim = 1)
     softmax = nn.Softmax(dim = 1)
+    if if_weight:
+        weight_loss = WLoss(args.batchsize,4)
 
     # switch to train mode
     net.train()
@@ -237,10 +246,14 @@ def train(epoch):
         label1 = Variable(label1.cuda())
         label2 = Variable(label2.cuda())
         labels = torch.cat((label1,label2),0)
+        inputs = torch.cat((input1,input2),0)
 
 
         data_time.update(time.time() - end)
-        outputs,feat,_ = net(input1, input2)
+        if if_weight:
+            outputs,feat,_,w = net(inputs)
+        else:
+            outputs,feat,_ = net(inputs)
         if args.method =='id':
             loss = criterion(outputs, labels)
             #Klloss
@@ -254,7 +267,11 @@ def train(epoch):
             correct += predicted.eq(labels).sum().item()
         #feat = 1.*feat / (torch.norm(feat, 2, 1, keepdim=True).expand_as(feat) + 1e-10)
         triloss = tripletloss_cross(feat,labels) + tripletloss_global(feat,labels)
-        loss = triloss + loss
+        if if_weight:
+            wloss = weight_loss(w,labels)
+            loss = triloss + loss + wloss
+        else:
+            loss = triloss + loss
 
         optimizer.zero_grad()    
         loss.backward()
@@ -284,12 +301,15 @@ def test(epoch):
     print ('Extracting Gallery Feature...')
     start = time.time()
     ptr = 0
-    gall_feat = np.zeros((ngall, 2048))
+    gall_feat = np.zeros((ngall, final_dim))
     with torch.no_grad():
         for batch_idx, (input, label ) in enumerate(gall_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat = net(input, input, test_mode[0])
+            if if_weight:
+                _,_,feat,_ = net(input)
+            else:
+                _,_,feat = net(input)
             gall_feat[ptr:ptr+batch_num,: ] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))   
@@ -299,12 +319,15 @@ def test(epoch):
     print ('Extracting Query Feature...')
     start = time.time()
     ptr = 0
-    query_feat = np.zeros((nquery, 2048))
+    query_feat = np.zeros((nquery, final_dim))
     with torch.no_grad():
         for batch_idx, (input, label ) in enumerate(query_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat = net(input, input, test_mode[1])
+            if if_weight:
+                _,_,feat,_ = net(input)
+            else:
+                _,_,feat = net(input)
             query_feat[ptr:ptr+batch_num,: ] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num         
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))

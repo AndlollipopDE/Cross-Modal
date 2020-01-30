@@ -52,10 +52,16 @@ parser.add_argument('--trial', default=1, type=int,
 parser.add_argument('--gpu', default='0', type=str,
                     help='gpu device ids for CUDA_VISIBLE_DEVICES')
 parser.add_argument('--mode', default='all', type=str, help='all or indoor')
+parser.add_argument('--use_weight',action='store_true',help='if use weight')
 
 args = parser.parse_args()
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
+if_weight = arg.use_weight
+if if_weight:
+    final_dim = 2047
+else:
+    final_dim = 2048
 np.random.seed(1)
 dataset = args.dataset
 if dataset == 'sysu':
@@ -72,7 +78,7 @@ best_acc = 0  # best test accuracy
 start_epoch = 0
 
 print('==> Building model..')
-net = embed_net(args.low_dim, n_class, drop=args.drop, arch=args.arch)
+net = embed_net(final_dim, n_class, drop=args.drop, arch=args.arch,weight_flag=if_weight)
 net.to(device)
 cudnn.benchmark = True
 
@@ -155,7 +161,7 @@ query_loader = data.DataLoader(
     queryset, batch_size=args.test_batch, shuffle=False, num_workers=4)
 print('Data Loading Time:\t {:.3f}'.format(time.time()-end))
 
-feature_dim = args.low_dim
+feature_dim = final_dim
 
 if args.arch == 'resnet50':
     pool_dim = 2048
@@ -168,13 +174,16 @@ def extract_gall_feat(gall_loader):
     print('Extracting Gallery Feature...')
     start = time.time()
     ptr = 0
-    gall_feat = np.zeros((ngall, 2048))
-    gall_feat_pool = np.zeros((ngall, 2048))
+    gall_feat = np.zeros((ngall, final_dim))
+    gall_feat_pool = np.zeros((ngall, final_dim))
     with torch.no_grad():
         for batch_idx, (input, label) in enumerate(gall_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat = net(input, input, test_mode[0])
+            if if_weight:
+                _,_,feat,_ = net(input)
+            else:
+                _,_,feat = net(input)
             gall_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             gall_feat_pool[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
@@ -187,13 +196,16 @@ def extract_query_feat(query_loader):
     print('Extracting Query Feature...')
     start = time.time()
     ptr = 0
-    query_feat = np.zeros((nquery, 2048))
-    query_feat_pool = np.zeros((nquery, 2048))
+    query_feat = np.zeros((nquery, final_dim))
+    query_feat_pool = np.zeros((nquery, final_dim))
     with torch.no_grad():
         for batch_idx, (input, label) in enumerate(query_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat = net(input, input, test_mode[1])
+            if if_weight:
+                _,_,feat,_ = net(input)
+            else:
+                _,_,feat = net(input)
             query_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             query_feat_pool[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num

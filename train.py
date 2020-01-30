@@ -63,7 +63,7 @@ args = parser.parse_args()
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 np.random.seed(0)
 
-if_weight = arg.use_weight
+if_weight = args.use_weight
 if if_weight:
     final_dim = 2047
 else:
@@ -227,14 +227,14 @@ def train(epoch):
     correct = 0
     total = 0
     #New
-    tripletloss_global = TripletLoss(args.batchsize,4,cross_modal = False)
-    tripletloss_cross = TripletLoss(args.batchsize,4,cross_modal = True)
+    tripletloss_global = TripletLoss(args.batch_size,4,cross_modal = False)
+    tripletloss_cross = TripletLoss(args.batch_size,4,cross_modal = True)
     #klloss = nn.KLDivLoss(size_average = False)
     #centerloss = CenterLoss(395,2048)
     #logsoftmax = nn.LogSoftmax(dim = 1)
     softmax = nn.Softmax(dim = 1)
     if if_weight:
-        weight_loss = WLoss(args.batchsize,4)
+        weight_loss = WLoss(args.batch_size,4)
 
     # switch to train mode
     net.train()

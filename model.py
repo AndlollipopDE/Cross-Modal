@@ -72,9 +72,9 @@ class backbone(nn.Module):
 
 
 class backbone_weight(nn.Module):
-    def __init__(self, arch='resnet18')
-      super(backbone_weight, self).__init__()
-       if arch == 'resnet18':
+    def __init__(self, arch='resnet18'):
+        super(backbone_weight, self).__init__()
+        if arch == 'resnet18':
             model_ft = models.resnet18(pretrained=True)
         elif arch == 'resnet50':
             model_ft = models.resnet50(pretrained=True)
@@ -105,11 +105,11 @@ class backbone_weight(nn.Module):
 
 
 class embed_net(nn.Module):
-    def __init__(self, low_dim, class_num, drop=0.5, arch='resnet50',weight_flag = False):
+    def __init__(self, low_dim, class_num, drop=0.5, arch='resnet50', weight_flag=False):
         super(embed_net, self).__init__()
         self.weight = weight_flag
         if self.weight:
-            self.backbone = backbone_weight(arch = arch)
+            self.backbone = backbone_weight(arch=arch)
         else:
             self.backbone = backbone(arch=arch)
 
@@ -121,17 +121,15 @@ class embed_net(nn.Module):
 
     def forward(self, x1):
         if self.weight:
-            yt,w = self.backbone(x1)
+            yt, w = self.backbone(x1)
         else:
             yt = self.backbone(x1)
         yi = self.bn(yt)
         out = self.fc(yi)
         if self.weight:
-            return out,yt,yi,w
+            return out, yt, yi, w
         else:
-            return out,yt,yi
-
-
+            return out, yt, yi
 
 
 # debug model structure

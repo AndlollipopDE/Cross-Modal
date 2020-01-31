@@ -6,15 +6,17 @@ from torch.autograd import Variable
 import random
 
 
+# L2 normalized
 class Normalize(nn.Module):
     def __init__(self, power=2):
         super(Normalize, self).__init__()
         self.power = power
 
     def forward(self, x):
-        norm = x.pow(self.power).sum(1, keepdim=True).pow(1./self.power)
+        norm = x.pow(self.power).sum(1, keepdim=True).pow(1. / self.power)
         out = x.div(norm)
         return out
+
 
 # #####################################################################
 
@@ -26,7 +28,7 @@ class Non_local(nn.Module):
         super(Non_local, self).__init__()
 
         self.in_channels = in_channels
-        self.inter_channels = reduc_ratio//reduc_ratio
+        self.inter_channels = reduc_ratio // reduc_ratio
 
         self.g = nn.Sequential(
             nn.Conv2d(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1,
@@ -63,7 +65,7 @@ class Non_local(nn.Module):
         f = torch.matmul(theta_x, phi_x)
         N = f.size(-1)
         f_div_C = torch.nn.functional.softmax(f, dim=-1)
-        #f_div_C = f / N
+        # f_div_C = f / N
 
         y = torch.matmul(f_div_C, g_x)
         y = y.permute(0, 2, 1).contiguous()
@@ -193,7 +195,6 @@ class embed_net(nn.Module):
             return out, yt, yi, w
         else:
             return out, yt, yi
-
 
 # debug model structure
 

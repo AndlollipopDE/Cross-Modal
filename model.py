@@ -85,7 +85,7 @@ class SEN_Block(nn.Module):
         self.SE = nn.Sequential(
             nn.Conv2d(self.in_planes, self.inter_planes, 1),
             nn.ReLU(),
-            nn.Conv2d(self.inter_planes, self.out_features, 1),
+            nn.Conv2d(self.inter_planes, self.out_planes, 1),
             nn.Sigmoid()
         )
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
@@ -134,14 +134,33 @@ class backbone(nn.Module):
         model_ft.layer4[0].downsample[0].stride = (1, 1)
         self.visible = model_ft
         self.dropout = nn.Dropout(p=0.5)
-        self.non1 = Non_local(256)
-        self.non2 = Non_local(512)
-        self.non3 = Non_local(1024)
-        self.non4 = Non_local(2048)
-        self.se1 = SEN_Block(256)
-        self.se2 = SEN_Block(512)
-        self.se3 = SEN_Block(1024)
-        self.se4 = SEN_Block(2048)
+        layers = [3, 4, 6, 3]
+        num_layer = [0, 2, 3, 0]
+        self.NL_1 = nn.ModuleList([Non_local(256)
+                                   for i in range(num_layer[0])])
+        self.NL_1_idx = sorted([layers[0] - (i + 1)
+                                for i in range(num_layer[0])])
+        self.NL_2 = nn.ModuleList([Non_local(512)
+                                   for i in range(num_layer[1])])
+        self.NL_2_idx = sorted([layers[1] - (i + 1)
+                                for i in range(num_layer[1])])
+        self.NL_3 = nn.ModuleList([Non_local(1024)
+                                   for i in range(num_layer[2])])
+        self.NL_3_idx = sorted([layers[2] - (i + 1)
+                                for i in range(num_layer[2])])
+        self.NL_4 = nn.ModuleList([Non_local(2048)
+                                   for i in range(num_layer[3])])
+        self.NL_4_idx = sorted([layers[3] - (i + 1)
+                                for i in range(num_layer[3])])
+
+        self.SE_1 = nn.ModuleList([SEN_Block(256)
+                                   for i in range(num_layer[0])])
+        self.SE_2 = nn.ModuleList([SEN_Block(512)
+                                   for i in range(num_layer[1])])
+        self.SE_3 = nn.ModuleList([SEN_Block(1024)
+                                   for i in range(num_layer[2])])
+        self.SE_4 = nn.ModuleList([SEN_Block(2048)
+                                   for i in range(num_layer[3])])
         # self.avgpool = nn.AdaptiveAvgPool2d((6,1))
 
     def forward(self, x):
@@ -149,18 +168,43 @@ class backbone(nn.Module):
         x = self.visible.bn1(x)
         x = self.visible.relu(x)
         x = self.visible.maxpool(x)
-        x = self.visible.layer1(x)
-        x = self.non1(x)
-        x = self.se1(x)
-        x = self.visible.layer2(x)
-        x = self.non2(x)
-        x = self.se2(x)
-        x = self.visible.layer3(x)
-        x = self.non3(x)
-        x = self.se3(x)
-        x = self.visible.layer4(x)
-        x = self.non4(x)
-        x = self.se4(x)
+
+        counter1 = 0
+        if len(self.NL_1_idx) == 0:
+            self.NL_1_idx = [-1]
+        for i in range(len(self.visible.layer1)):
+            x = self.visible.layer1[i](x)
+            if i == self.NL_1_idx[counter1]:
+                x = self.NL_1[counter1](x)
+                x = self.SE_1[counter1](x)
+                counter1 += 1
+        counter2 = 0
+        if len(self.NL_2_idx) == 0:
+            self.NL_2_idx = [-1]
+        for i in range(len(self.visible.layer2)):
+            x = self.visible.layer2[i](x)
+            if i == self.NL_2_idx[counter2]:
+                x = self.NL_2[counter2](x)
+                x = self.SE_2[counter2](x)
+                counter2 += 1
+        counter3 = 0
+        if len(self.NL_3_idx) == 0:
+            self.NL_3_idx = [-1]
+        for i in range(len(self.visible.layer3)):
+            x = self.visible.layer3[i](x)
+            if i == self.NL_3_idx[counter3]:
+                x = self.NL_3[counter3](x)
+                x = self.SE_3[counter3](x)
+                counter3 += 1
+        counter4 = 0
+        if len(self.NL_4_idx) == 0:
+            self.NL_4_idx = [-1]
+        for i in range(len(self.visible.layer4)):
+            x = self.visible.layer4[i](x)
+            if i == self.NL_4_idx[counter4]:
+                x = self.NL_4[counter4](x)
+                x = self.SE_4[counter4](x)
+                counter4 += 1
         x = self.visible.avgpool(x)
         x = x.view(x.size(0), x.size(1))
         # x = self.dropout(x)

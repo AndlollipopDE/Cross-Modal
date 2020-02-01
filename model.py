@@ -74,6 +74,29 @@ class Non_local(nn.Module):
         return z
 
 
+class SEN_Block(nn.Module):
+    def __init__(self, in_planes, reduct_ratio=16):
+        super(SEN_Block, self).__init__()
+        self.in_planes = in_planes
+        self.out_planes = self.in_planes
+        self.inter_planes = int(self.in_planes / reduct_ratio)
+        self.SE = nn.Sequential(
+            nn.Conv2d(self.in_planes, self.inter_planes, 1),
+            nn.ReLU(),
+            nn.Conv2d(self.inter_planes, self.out_features, 1),
+            nn.Sigmoid()
+        )
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        return
+
+    def forward(self, x):
+        x1 = self.avgpool(x)
+        x1 = self.SE(x1)
+        x_out = torch.mul(x, x1)
+        x_out = x_out + x
+        return x_out
+
+
 def weights_init_kaiming(m):
     classname = m.__class__.__name__
     # print(classname)
@@ -113,6 +136,10 @@ class backbone(nn.Module):
         self.non2 = Non_local(512)
         self.non3 = Non_local(1024)
         self.non4 = Non_local(2048)
+        self.se1 = SEN_Block(256)
+        self.se2 = SEN_Block(512)
+        self.se3 = SEN_Block(1024)
+        self.se4 = SEN_Block(2048)
         # self.avgpool = nn.AdaptiveAvgPool2d((6,1))
 
     def forward(self, x):
@@ -122,12 +149,16 @@ class backbone(nn.Module):
         x = self.visible.maxpool(x)
         x = self.visible.layer1(x)
         x = self.non1(x)
+        x = self.se1(x)
         x = self.visible.layer2(x)
         x = self.non2(x)
+        x = self.se2(x)
         x = self.visible.layer3(x)
         x = self.non3(x)
+        x = self.se3(x)
         x = self.visible.layer4(x)
         x = self.non4(x)
+        x = self.se4(x)
         x = self.visible.avgpool(x)
         x = x.view(x.size(0), x.size(1))
         # x = self.dropout(x)

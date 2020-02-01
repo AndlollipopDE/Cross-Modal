@@ -57,7 +57,7 @@ parser.add_argument('--use_weight',action='store_true',help='if use weight')
 args = parser.parse_args()
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
-if_weight = arg.use_weight
+if_weight = args.use_weight
 if if_weight:
     final_dim = 2047
 else:

@@ -24,7 +24,7 @@ class Normalize(nn.Module):
 
 
 class Non_local(nn.Module):
-    def __init__(self, in_channels, reduc_ratio=2):
+    def __init__(self, in_channels, reduc_ratio=2, se_ratio=16):
         super(Non_local, self).__init__()
 
         self.in_channels = in_channels
@@ -49,6 +49,14 @@ class Non_local(nn.Module):
         self.phi = nn.Conv2d(in_channels=self.in_channels, out_channels=self.inter_channels,
                              kernel_size=1, stride=1, padding=0)
 
+        self.seinter_channels = self.in_channels // se_ratio
+        self.SE = nn.Sequential(
+            nn.Conv2d(self.in_channels, self.seinter_channels, 1),
+            nn.ReLU(),
+            nn.Conv2d(self.seinter_channels, self.in_channels, 1),
+            nn.Sigmoid()
+        )
+
     def forward(self, x):
         '''
                 :param x: (b, c, t, h, w)
@@ -71,32 +79,11 @@ class Non_local(nn.Module):
         y = y.permute(0, 2, 1).contiguous()
         y = y.view(batch_size, self.inter_channels, *x.size()[2:])
         W_y = self.W(y)
+        #W_y_cw = self.SE(W_y)
+        #W_y = torch.mul(W_y,W_y_cw)
         z = W_y + x
 
         return z
-
-
-class SEN_Block(nn.Module):
-    def __init__(self, in_planes, reduct_ratio=16):
-        super(SEN_Block, self).__init__()
-        self.in_planes = in_planes
-        self.out_planes = self.in_planes
-        self.inter_planes = int(self.in_planes / reduct_ratio)
-        self.SE = nn.Sequential(
-            nn.Conv2d(self.in_planes, self.inter_planes, 1),
-            nn.ReLU(),
-            nn.Conv2d(self.inter_planes, self.out_planes, 1),
-            nn.Sigmoid()
-        )
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        return
-
-    def forward(self, x):
-        x1 = self.avgpool(x)
-        x1 = self.SE(x1)
-        x_out = torch.mul(x, x1)
-        x_out = x_out + x
-        return x_out
 
 
 def weights_init_kaiming(m):
@@ -152,15 +139,6 @@ class backbone(nn.Module):
                                    for i in range(num_layer[3])])
         self.NL_4_idx = sorted([layers[3] - (i + 1)
                                 for i in range(num_layer[3])])
-
-        self.SE_1 = nn.ModuleList([SEN_Block(256)
-                                   for i in range(num_layer[0])])
-        self.SE_2 = nn.ModuleList([SEN_Block(512)
-                                   for i in range(num_layer[1])])
-        self.SE_3 = nn.ModuleList([SEN_Block(1024)
-                                   for i in range(num_layer[2])])
-        self.SE_4 = nn.ModuleList([SEN_Block(2048)
-                                   for i in range(num_layer[3])])
         # self.avgpool = nn.AdaptiveAvgPool2d((6,1))
 
     def forward(self, x):
@@ -176,7 +154,6 @@ class backbone(nn.Module):
             x = self.visible.layer1[i](x)
             if i == self.NL_1_idx[counter1]:
                 x = self.NL_1[counter1](x)
-                x = self.SE_1[counter1](x)
                 counter1 += 1
         counter2 = 0
         if len(self.NL_2_idx) == 0:
@@ -185,7 +162,6 @@ class backbone(nn.Module):
             x = self.visible.layer2[i](x)
             if i == self.NL_2_idx[counter2]:
                 x = self.NL_2[counter2](x)
-                x = self.SE_2[counter2](x)
                 counter2 += 1
         counter3 = 0
         if len(self.NL_3_idx) == 0:
@@ -194,7 +170,6 @@ class backbone(nn.Module):
             x = self.visible.layer3[i](x)
             if i == self.NL_3_idx[counter3]:
                 x = self.NL_3[counter3](x)
-                x = self.SE_3[counter3](x)
                 counter3 += 1
         counter4 = 0
         if len(self.NL_4_idx) == 0:
@@ -203,7 +178,6 @@ class backbone(nn.Module):
             x = self.visible.layer4[i](x)
             if i == self.NL_4_idx[counter4]:
                 x = self.NL_4[counter4](x)
-                x = self.SE_4[counter4](x)
                 counter4 += 1
         x = self.visible.avgpool(x)
         x = x.view(x.size(0), x.size(1))

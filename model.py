@@ -56,6 +56,7 @@ class Non_local(nn.Module):
             nn.Conv2d(self.seinter_channels, self.in_channels, 1),
             nn.Sigmoid()
         )
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 
     def forward(self, x):
         '''
@@ -64,6 +65,8 @@ class Non_local(nn.Module):
                 '''
 
         batch_size = x.size(0)
+        x_temp = self.avgpool(x)
+        W_cw = self.SE(x_temp)
         g_x = self.g(x).view(batch_size, self.inter_channels, -1)
         g_x = g_x.permute(0, 2, 1)
 
@@ -79,8 +82,7 @@ class Non_local(nn.Module):
         y = y.permute(0, 2, 1).contiguous()
         y = y.view(batch_size, self.inter_channels, *x.size()[2:])
         W_y = self.W(y)
-        W_y_cw = self.SE(W_y)
-        W_y = torch.mul(W_y, W_y_cw)
+        W_y = torch.mul(W_cw, W_y)
         z = W_y + x
 
         return z

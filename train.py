@@ -1,7 +1,7 @@
 from __future__ import print_function
 import argparse
 import sys
-import time 
+import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -22,19 +22,21 @@ from centerloss import CenterLoss
 from wloss import WLoss
 
 parser = argparse.ArgumentParser(description='PyTorch Cross-Modality Training')
-parser.add_argument('--dataset', default='sysu',  help='dataset name: regdb or sysu]')
-parser.add_argument('--lr', default=3.5e-5, type=float, help='learning rate')#3.5e-5
+parser.add_argument('--dataset', default='sysu',
+                    help='dataset name: regdb or sysu]')
+parser.add_argument('--lr', default=3.5e-5, type=float,
+                    help='learning rate')  # 3.5e-5
 parser.add_argument('--optim', default='adam', type=str, help='optimizer')
-parser.add_argument('--arch', default='resnet50', type=str, 
+parser.add_argument('--arch', default='resnet50', type=str,
                     help='network baseline:resnet18 or resnet50')
-parser.add_argument('--resume', '-r', default='', type=str, 
+parser.add_argument('--resume', '-r', default='', type=str,
                     help='resume from checkpoint')
-parser.add_argument('--test-only', action='store_true', help='test only') 
-parser.add_argument('--model_path', default='./save_model/', type=str, 
+parser.add_argument('--test-only', action='store_true', help='test only')
+parser.add_argument('--model_path', default='./save_model/', type=str,
                     help='model save path')
 parser.add_argument('--save_epoch', default=20, type=int,
                     metavar='s', help='save model every 10 epochs')
-parser.add_argument('--log_path', default='log/', type=str, 
+parser.add_argument('--log_path', default='log/', type=str,
                     help='log save path')
 parser.add_argument('--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
@@ -55,11 +57,11 @@ parser.add_argument('--drop', default=0.0, type=float,
 parser.add_argument('--trial', default=1, type=int,
                     metavar='t', help='trial (only for RegDB dataset)')
 parser.add_argument('--gpu', default='0', type=str,
-                      help='gpu device ids for CUDA_VISIBLE_DEVICES')
+                    help='gpu device ids for CUDA_VISIBLE_DEVICES')
 parser.add_argument('--mode', default='all', type=str, help='all or indoor')
-parser.add_argument('--use_weight',action='store_true',help='if use weight')
+parser.add_argument('--use_weight', action='store_true', help='if use weight')
 
-args = parser.parse_args() 
+args = parser.parse_args()
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 np.random.seed(0)
 
@@ -72,11 +74,11 @@ dataset = args.dataset
 if dataset == 'sysu':
     data_path = './SYSUMM01/'
     log_path = args.log_path + 'sysu_log/'
-    test_mode = [1, 2] # thermal to visible
-elif dataset =='regdb':
+    test_mode = [1, 2]  # thermal to visible
+elif dataset == 'regdb':
     data_path = 'RegDB/'
     log_path = args.log_path + 'regdb_log/'
-    test_mode = [2, 1] # visible to thermal
+    test_mode = [2, 1]  # visible to thermal
 
 checkpoint_path = args.model_path
 
@@ -84,34 +86,35 @@ if not os.path.isdir(log_path):
     os.makedirs(log_path)
 if not os.path.isdir(checkpoint_path):
     os.makedirs(checkpoint_path)
- 
-if args.method =='id':
+
+if args.method == 'id':
     suffix = dataset + '_id_bn_relu'
-suffix = suffix + '_drop_{}'.format(args.drop) 
-suffix = suffix + '_lr_{:1.1e}'.format(args.lr) 
+suffix = suffix + '_drop_{}'.format(args.drop)
+suffix = suffix + '_lr_{:1.1e}'.format(args.lr)
 suffix = suffix + '_dim_{}'.format(args.low_dim)
 if not args.optim == 'sgd':
     suffix = suffix + '_' + args.optim
 suffix = suffix + '_' + args.arch
-if dataset =='regdb':
+if dataset == 'regdb':
     suffix = suffix + '_trial_{}'.format(args.trial)
 
 test_log_file = open(log_path + suffix + '.txt', "w")
-sys.stdout = Logger(log_path  + suffix + '_os.txt')
+sys.stdout = Logger(log_path + suffix + '_os.txt')
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0  # best test accuracy
-start_epoch = 0 
+start_epoch = 0
 feature_dim = args.low_dim
 
 print('==> Loading data..')
 # Data loading code
 randomerase = RandomErasing(probability=0.5)
-normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+normalize = transforms.Normalize(
+    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 transform_train = transforms.Compose([
     transforms.ToPILImage(),
     transforms.Pad(10),
-    transforms.RandomCrop((args.img_h,args.img_w)),
+    transforms.RandomCrop((args.img_h, args.img_w)),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
     normalize,
@@ -119,39 +122,49 @@ transform_train = transforms.Compose([
 ])
 transform_test = transforms.Compose([
     transforms.ToPILImage(),
-    transforms.Resize((args.img_h,args.img_w)),
+    transforms.Resize((args.img_h, args.img_w)),
     transforms.ToTensor(),
     normalize,
 ])
 
 end = time.time()
-if dataset =='sysu':
+if dataset == 'sysu':
     # training set
     trainset = SYSUData(data_path,  transform=transform_train)
     # generate the idx of each person identity
-    color_pos, thermal_pos = GenIdx(trainset.train_color_label, trainset.train_thermal_label)
-    
+    color_pos, thermal_pos = GenIdx(
+        trainset.train_color_label, trainset.train_thermal_label)
+
     # testing set
-    query_img, query_label, query_cam = process_query_sysu(data_path, mode = args.mode)
-    gall_img, gall_label, gall_cam = process_gallery_sysu(data_path, mode = args.mode, trial = 0)
-      
-elif dataset =='regdb':
+    query_img, query_label, query_cam = process_query_sysu(
+        data_path, mode=args.mode)
+    gall_img, gall_label, gall_cam = process_gallery_sysu(
+        data_path, mode=args.mode, trial=0)
+
+elif dataset == 'regdb':
     # training set
     trainset = RegDBData(data_path, args.trial, transform=transform_train)
     # generate the idx of each person identity
-    color_pos, thermal_pos = GenIdx(trainset.train_color_label, trainset.train_thermal_label)
-    
-    # testing set
-    query_img, query_label = process_test_regdb(data_path, trial = args.trial, modal = 'visible')
-    gall_img, gall_label  = process_test_regdb(data_path, trial = args.trial, modal = 'thermal')
+    color_pos, thermal_pos = GenIdx(
+        trainset.train_color_label, trainset.train_thermal_label)
 
-gallset  = TestData(gall_img, gall_label, transform = transform_test, img_size =(args.img_w,args.img_h))
-queryset = TestData(query_img, query_label, transform = transform_test, img_size =(args.img_w,args.img_h))
-    
+    # testing set
+    query_img, query_label = process_test_regdb(
+        data_path, trial=args.trial, modal='visible')
+    gall_img, gall_label = process_test_regdb(
+        data_path, trial=args.trial, modal='thermal')
+
+gallset = TestData(gall_img, gall_label, transform=transform_test,
+                   img_size=(args.img_w, args.img_h))
+queryset = TestData(query_img, query_label,
+                    transform=transform_test, img_size=(args.img_w, args.img_h))
+
 # testing data loader
-gall_loader  = data.DataLoader(gallset, batch_size=args.test_batch, shuffle=False, num_workers=args.workers)
-query_loader = data.DataLoader(queryset, batch_size=args.test_batch, shuffle=False, num_workers=args.workers)
-   
+gall_loader = data.DataLoader(
+    gallset, batch_size=args.test_batch, shuffle=False, num_workers=args.workers)
+query_loader = data.DataLoader(
+    queryset, batch_size=args.test_batch, shuffle=False, num_workers=args.workers)
+
 n_class = len(np.unique(trainset.train_color_label))
 nquery = len(query_label)
 ngall = len(gall_label)
@@ -160,21 +173,24 @@ print('Dataset {} statistics:'.format(dataset))
 print('  ------------------------------')
 print('  subset   | # ids | # images')
 print('  ------------------------------')
-print('  visible  | {:5d} | {:8d}'.format(n_class, len(trainset.train_color_label)))
-print('  thermal  | {:5d} | {:8d}'.format(n_class, len(trainset.train_thermal_label)))
+print('  visible  | {:5d} | {:8d}'.format(
+    n_class, len(trainset.train_color_label)))
+print('  thermal  | {:5d} | {:8d}'.format(
+    n_class, len(trainset.train_thermal_label)))
 print('  ------------------------------')
 print('  query    | {:5d} | {:8d}'.format(len(np.unique(query_label)), nquery))
 print('  gallery  | {:5d} | {:8d}'.format(len(np.unique(gall_label)), ngall))
-print('  ------------------------------')   
+print('  ------------------------------')
 print('Data Loading Time:\t {:.3f}'.format(time.time()-end))
 
 
 print('==> Building model..')
-net = embed_net(final_dim, n_class, drop = args.drop, arch=args.arch,weight_flag=if_weight)
+net = embed_net(final_dim, n_class, drop=args.drop,
+                arch=args.arch, weight_flag=if_weight)
 net.to(device)
 cudnn.benchmark = True
 
-if len(args.resume)>0:   
+if len(args.resume) > 0:
     model_path = checkpoint_path + args.resume
     if os.path.isfile(model_path):
         print('==> loading checkpoint {}'.format(args.resume))
@@ -186,7 +202,7 @@ if len(args.resume)>0:
     else:
         print('==> no checkpoint found at {}'.format(args.resume))
 
-if args.method =='id':
+if args.method == 'id':
     criterion = CrossEntropySmooth(n_class)
     #criterion = nn.CrossEntropyLoss()
     criterion.to(device)
@@ -197,14 +213,14 @@ if args.method =='id':
 
 if args.optim == 'sgd':
     optimizer = optim.SGD([
-         {'params': net.parameters(), 'lr': args.lr},],
-         weight_decay=5e-4, momentum=0.9, nesterov=True)
+        {'params': net.parameters(), 'lr': args.lr}, ],
+        weight_decay=5e-4, momentum=0.9, nesterov=True)
 elif args.optim == 'adam':
     optimizer = optim.Adam([
-         {'params': net.parameters(), 'lr': args.lr},],
-         weight_decay=5e-4)
+        {'params': net.parameters(), 'lr': args.lr}, ],
+        weight_decay=5e-4)
 
-         
+
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     if epoch < 10 and epoch >= 0:
@@ -219,6 +235,7 @@ def adjust_learning_rate(optimizer, epoch):
     optimizer.param_groups[0]['lr'] = lr
     return lr
 
+
 def train(epoch):
     current_lr = adjust_learning_rate(optimizer, epoch)
     train_loss = AverageMeter()
@@ -226,15 +243,15 @@ def train(epoch):
     batch_time = AverageMeter()
     correct = 0
     total = 0
-    #New
-    tripletloss_global = TripletLoss(args.batch_size,4,cross_modal = False)
-    tripletloss_cross = TripletLoss(args.batch_size,4,cross_modal = True)
+    # New
+    tripletloss_global = TripletLoss(args.batch_size, 4, cross_modal=False)
+    tripletloss_cross = TripletLoss(args.batch_size, 4, cross_modal=True)
     #klloss = nn.KLDivLoss(size_average = False)
     #centerloss = CenterLoss(395,2048)
     #logsoftmax = nn.LogSoftmax(dim = 1)
-    softmax = nn.Softmax(dim = 1)
+    softmax = nn.Softmax(dim=1)
     if if_weight:
-        weight_loss = WLoss(args.batch_size,4)
+        weight_loss = WLoss(args.batch_size, 4)
 
     # switch to train mode
     net.train()
@@ -245,18 +262,17 @@ def train(epoch):
         input2 = Variable(input2.cuda())
         label1 = Variable(label1.cuda())
         label2 = Variable(label2.cuda())
-        labels = torch.cat((label1,label2),0)
-        inputs = torch.cat((input1,input2),0)
-
+        labels = torch.cat((label1, label2), 0)
+        inputs = torch.cat((input1, input2), 0)
 
         data_time.update(time.time() - end)
         if if_weight:
-            outputs,feat,_,w = net(inputs)
+            outputs, feat, _, w = net(inputs)
         else:
-            outputs,feat,_ = net(inputs)
-        if args.method =='id':
+            outputs, feat, _ = net(inputs)
+        if args.method == 'id':
             loss = criterion(outputs, labels)
-            #Klloss
+            # Klloss
             #outputs_rgb = outputs[0:32,:]
             #outputs_ir = outputs[32:,:]
             #outputs_ir2 = logsoftmax(outputs_ir)
@@ -266,14 +282,15 @@ def train(epoch):
             _, predicted = torch.max(score.data, 1)
             correct += predicted.eq(labels).sum().item()
         #feat = 1.*feat / (torch.norm(feat, 2, 1, keepdim=True).expand_as(feat) + 1e-10)
-        triloss = tripletloss_cross(feat,labels) + tripletloss_global(feat,labels)
+        triloss = tripletloss_cross(
+            feat, labels) + tripletloss_global(feat, labels)
         if if_weight:
-            wloss = weight_loss(w,labels)
+            wloss = weight_loss(w, labels)
             loss = triloss + loss + wloss
         else:
             loss = triloss + loss
 
-        optimizer.zero_grad()    
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         train_loss.update(loss.item(), 2*input1.size(0))
@@ -283,101 +300,105 @@ def train(epoch):
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-        if batch_idx%10 ==0:
+        if batch_idx % 10 == 0:
             print('Epoch: [{}][{}/{}] '
                   'Time: {batch_time.val:.3f} ({batch_time.avg:.3f}) '
                   'Data: {data_time.val:.3f} ({data_time.avg:.3f}) '
                   'lr:{} '
                   'Loss: {train_loss.val:.4f} ({train_loss.avg:.4f}) '
                   'Accu: {:.2f}' .format(
-                  epoch, batch_idx, len(trainloader),current_lr, 
-                  100.*correct/total, batch_time=batch_time, 
-                  data_time=data_time, train_loss=train_loss))
-                  
+                      epoch, batch_idx, len(trainloader), current_lr,
+                      100.*correct/total, batch_time=batch_time,
+                      data_time=data_time, train_loss=train_loss))
 
-def test(epoch):   
+
+def test(epoch):
     # switch to evaluation mode
     net.eval()
-    print ('Extracting Gallery Feature...')
+    print('Extracting Gallery Feature...')
     start = time.time()
     ptr = 0
     gall_feat = np.zeros((ngall, final_dim))
     with torch.no_grad():
-        for batch_idx, (input, label ) in enumerate(gall_loader):
+        for batch_idx, (input, label) in enumerate(gall_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
             if if_weight:
-                _,_,feat,_ = net(input)
+                _, _, feat, _ = net(input)
             else:
-                _,_,feat = net(input)
-            gall_feat[ptr:ptr+batch_num,: ] = feat.detach().cpu().numpy()
+                _, _, feat = net(input)
+            gall_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
-    print('Extracting Time:\t {:.3f}'.format(time.time()-start))   
+    print('Extracting Time:\t {:.3f}'.format(time.time()-start))
 
     # switch to evaluation mode
     net.eval()
-    print ('Extracting Query Feature...')
+    print('Extracting Query Feature...')
     start = time.time()
     ptr = 0
     query_feat = np.zeros((nquery, final_dim))
     with torch.no_grad():
-        for batch_idx, (input, label ) in enumerate(query_loader):
+        for batch_idx, (input, label) in enumerate(query_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
             if if_weight:
-                _,_,feat,_ = net(input)
+                _, _, feat, _ = net(input)
             else:
-                _,_,feat = net(input)
-            query_feat[ptr:ptr+batch_num,: ] = feat.detach().cpu().numpy()
-            ptr = ptr + batch_num         
+                _, _, feat = net(input)
+            query_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
+            ptr = ptr + batch_num
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))
-    
+
     start = time.time()
     # compute the similarity
-    gall_feat = 1.*gall_feat/np.repeat(np.linalg.norm(gall_feat,2,1,True),gall_feat.shape[1],1)
-    query_feat = 1.*query_feat/np.repeat(np.linalg.norm(query_feat,2,1,True),query_feat.shape[1],1)
-    distmat  = np.matmul(query_feat, np.transpose(gall_feat))
-    
+    gall_feat = 1.*gall_feat / \
+        np.repeat(np.linalg.norm(gall_feat, 2, 1, True), gall_feat.shape[1], 1)
+    query_feat = 1.*query_feat / \
+        np.repeat(np.linalg.norm(query_feat, 2, 1, True),
+                  query_feat.shape[1], 1)
+    distmat = np.matmul(query_feat, np.transpose(gall_feat))
+
     # evaluation
-    if dataset =='regdb':
+    if dataset == 'regdb':
         cmc, mAP = eval_regdb(-distmat, query_label, gall_label)
-    elif dataset =='sysu':
-        cmc, mAP = eval_sysu(-distmat, query_label, gall_label, query_cam, gall_cam)
+    elif dataset == 'sysu':
+        cmc, mAP = eval_sysu(-distmat, query_label,
+                             gall_label, query_cam, gall_cam)
     print('Evaluation Time:\t {:.3f}'.format(time.time()-start))
     return cmc, mAP
-    
+
+
 # training
-print('==> Start Training...')   
+print('==> Start Training...')
 
-for epoch in range(start_epoch, 121-start_epoch):
+for epoch in range(start_epoch, 121):
 
-    
     print('==> Preparing Data Loader...')
     # identity sampler
-    sampler = IdentitySampler(trainset.train_color_label, \
-        trainset.train_thermal_label, color_pos, thermal_pos, args.batch_size)
-    trainset.cIndex = sampler.index1 # color index
-    trainset.tIndex = sampler.index2 # thermal index
-    trainloader = data.DataLoader(trainset, batch_size=args.batch_size,\
-        sampler = sampler, num_workers=args.workers, drop_last =True)
+    sampler = IdentitySampler(trainset.train_color_label,
+                              trainset.train_thermal_label, color_pos, thermal_pos, args.batch_size)
+    trainset.cIndex = sampler.index1  # color index
+    trainset.tIndex = sampler.index2  # thermal index
+    trainloader = data.DataLoader(trainset, batch_size=args.batch_size,
+                                  sampler=sampler, num_workers=args.workers, drop_last=True)
 
     # training
     train(epoch)
 
-    if epoch > 0 and epoch%2 ==0:
-        print ('Test Epoch: {}'.format(epoch))
-        print ('Test Epoch: {}'.format(epoch),file=test_log_file)
+    if epoch > 0 and epoch % 2 == 0:
+        print('Test Epoch: {}'.format(epoch))
+        print('Test Epoch: {}'.format(epoch), file=test_log_file)
         # testing
         cmc, mAP = test(epoch)
 
         print('FC:   Rank-1: {:.2%} | Rank-5: {:.2%} | Rank-10: {:.2%}| mAP: {:.2%}'.format(
-                cmc[0], cmc[4], cmc[9], mAP))
+            cmc[0], cmc[4], cmc[9], mAP))
         print('FC:   Rank-1: {:.2%} | Rank-5: {:.2%} | Rank-10: {:.2%}| mAP: {:.2%}'.format(
-                cmc[0], cmc[4], cmc[9], mAP), file = test_log_file)
+            cmc[0], cmc[4], cmc[9], mAP), file=test_log_file)
         test_log_file.flush()
-        
+
         # save model
-        if cmc[0] > best_acc: # not the real best for sysu-mm01 
+        if cmc[0] > best_acc:  # not the real best for sysu-mm01
             best_acc = cmc[0]
             state = {
                 'net': net.state_dict(),
@@ -385,15 +406,16 @@ for epoch in range(start_epoch, 121-start_epoch):
                 'mAP': mAP,
                 'epoch': epoch,
             }
-            torch.save(state, checkpoint_path + suffix + 'origin_origin_best.t')
-        
-        # save model every 20 epochs    
-        if epoch > 10 and epoch%10 ==0:
+            torch.save(state, checkpoint_path +
+                       suffix + 'origin_origin_best.t')
+
+        # save model every 20 epochs
+        if epoch > 10 and epoch % 10 == 0:
             state = {
                 'net': net.state_dict(),
                 'cmc': cmc,
                 'mAP': mAP,
                 'epoch': epoch,
             }
-            torch.save(state, checkpoint_path + suffix + 'origin_origin_epoch_{}.t'.format(epoch))
-        
+            torch.save(state, checkpoint_path + suffix +
+                       'origin_origin_epoch_{}.t'.format(epoch))

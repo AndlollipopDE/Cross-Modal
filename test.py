@@ -25,7 +25,7 @@ parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
 parser.add_argument('--optim', default='sgd', type=str, help='optimizer')
 parser.add_argument('--arch', default='resnet50',
                     type=str, help='network baseline')
-parser.add_argument('--resume', '-r', default='haha',
+parser.add_argument('--resume', '-r', default='None',
                     type=str, help='resume from checkpoint')
 parser.add_argument('--model_path', default='save_model/',
                     type=str, help='model save path')
@@ -52,7 +52,7 @@ parser.add_argument('--trial', default=1, type=int,
 parser.add_argument('--gpu', default='0', type=str,
                     help='gpu device ids for CUDA_VISIBLE_DEVICES')
 parser.add_argument('--mode', default='all', type=str, help='all or indoor')
-parser.add_argument('--use_weight',action='store_true',help='if use weight')
+parser.add_argument('--use_weight', action='store_true', help='if use weight')
 
 args = parser.parse_args()
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -65,7 +65,7 @@ else:
 np.random.seed(1)
 dataset = args.dataset
 if dataset == 'sysu':
-    data_path = './SYSU-MM01/'
+    data_path = './SYSUMM01/'
     n_class = 395
     test_mode = [1, 2]
 elif dataset == 'regdb':
@@ -78,16 +78,18 @@ best_acc = 0  # best test accuracy
 start_epoch = 0
 
 print('==> Building model..')
-net = embed_net(final_dim, n_class, drop=args.drop, arch=args.arch,weight_flag=if_weight)
+net = embed_net(final_dim, n_class, drop=args.drop,
+                arch=args.arch, weight_flag=if_weight)
 net.to(device)
 cudnn.benchmark = True
 
 print('==> Resuming from checkpoint..')
 checkpoint_path = args.model_path
+model_name = args.resume
 if len(args.resume) > 0:
     print('==> loading checkpoint')
     checkpoint = torch.load(
-        './save_model/sysu_id_bn_relu_drop_0.0_lr_3.5e-05_dim_512_adam_resnet50origin_center_best.t')
+        checkpoint_path + model_name)
     start_epoch = checkpoint['epoch']
     net.load_state_dict(checkpoint['net'])
     print('==> loaded checkpoint {} (epoch {})'
@@ -181,9 +183,9 @@ def extract_gall_feat(gall_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
             if if_weight:
-                _,_,feat,_ = net(input)
+                _, _, feat, _ = net(input)
             else:
-                _,_,feat = net(input)
+                _, _, feat = net(input)
             gall_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             gall_feat_pool[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
@@ -203,9 +205,9 @@ def extract_query_feat(query_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
             if if_weight:
-                _,_,feat,_ = net(input)
+                _, _, feat, _ = net(input)
             else:
-                _,_,feat = net(input)
+                _, _, feat = net(input)
             query_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             query_feat_pool[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
@@ -248,10 +250,18 @@ elif dataset == 'sysu':
 
         gall_feat, gall_feat_pool = extract_gall_feat(trial_gall_loader)
 
-        gall_feat = 1.*gall_feat/np.repeat(np.linalg.norm(gall_feat,2,1,True),gall_feat.shape[1],1)
-        gall_feat_pool = 1.*gall_feat_pool/np.repeat(np.linalg.norm(gall_feat_pool,2,1,True),gall_feat_pool.shape[1],1)
-        query_feat = 1.*query_feat/np.repeat(np.linalg.norm(query_feat,2,1,True),query_feat.shape[1],1)
-        query_feat_pool = 1.*query_feat_pool/np.repeat(np.linalg.norm(query_feat_pool,2,1,True),query_feat_pool.shape[1],1)
+        gall_feat = 1.*gall_feat / \
+            np.repeat(np.linalg.norm(gall_feat, 2, 1, True),
+                      gall_feat.shape[1], 1)
+        gall_feat_pool = 1.*gall_feat_pool / \
+            np.repeat(np.linalg.norm(gall_feat_pool, 2, 1, True),
+                      gall_feat_pool.shape[1], 1)
+        query_feat = 1.*query_feat / \
+            np.repeat(np.linalg.norm(query_feat, 2, 1, True),
+                      query_feat.shape[1], 1)
+        query_feat_pool = 1.*query_feat_pool / \
+            np.repeat(np.linalg.norm(query_feat_pool, 2, 1, True),
+                      query_feat_pool.shape[1], 1)
         # fc feature
         distmat = np.matmul(query_feat, np.transpose(gall_feat))
         cmc, mAP = eval_sysu(-distmat, query_label,

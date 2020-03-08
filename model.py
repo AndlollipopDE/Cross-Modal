@@ -57,6 +57,8 @@ class Non_local(nn.Module):
             nn.Sigmoid()
         )
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.conv = nn.Conv2d(
+            in_channels=in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1, padding=0)
 
     def forward(self, x):
         '''
@@ -66,24 +68,28 @@ class Non_local(nn.Module):
 
         batch_size = x.size(0)
         x_temp = self.avgpool(x)
-        W_cw = self.SE(x_temp)
-        g_x = self.g(x).view(batch_size, self.inter_channels, -1)
+        x_c_weight = self.SE(x_temp)
+        x_c = torch.mul(x_c_weight, x)
+
+        convx = self.conv(x_c)
+
+        g_x = self.g(x_c).view(batch_size, self.inter_channels, -1)
         g_x = g_x.permute(0, 2, 1)
 
-        theta_x = self.theta(x).view(batch_size, self.inter_channels, -1)
+        theta_x = self.theta(x_c).view(batch_size, self.inter_channels, -1)
         theta_x = theta_x.permute(0, 2, 1)
-        phi_x = self.phi(x).view(batch_size, self.inter_channels, -1)
+        phi_x = self.phi(x_c).view(batch_size, self.inter_channels, -1)
         f = torch.matmul(theta_x, phi_x)
         N = f.size(-1)
-        f_div_C = torch.nn.functional.softmax(f, dim=-1)
-        # f_div_C = f / N
+        f_div_C = f / N
 
         y = torch.matmul(f_div_C, g_x)
         y = y.permute(0, 2, 1).contiguous()
         y = y.view(batch_size, self.inter_channels, *x.size()[2:])
+        #y = y + convx
         W_y = self.W(y)
-        W_y = torch.mul(W_cw, W_y)
         z = W_y + x
+        #z = W_y
 
         return z
 
@@ -123,11 +129,36 @@ class backbone(nn.Module):
         model_ft.layer4[0].downsample[0].stride = (1, 1)
         self.visible = model_ft
         self.dropout = nn.Dropout(p=0.5)
-        self.snl1 = Non_local(256)
-        self.snl2 = Non_local(512)
-        self.snl3 = Non_local(1024)
-        self.snl4 = Non_local(2048)
+        # self.snl1 = Non_local(256)
+        # self.snl2 = Non_local(512)
+        # self.snl3 = Non_local(1024)
+        # self.snl4 = Non_local(2048)
         # self.avgpool = nn.AdaptiveAvgPool2d((6,1))
+        self.conv1 = nn.Sequential(nn.Conv2d(in_channels=512, out_channels=128, kernel_size=3, stride=2, padding=1),
+                                   nn.BatchNorm2d(128),
+                                   nn.ReLU(),
+                                   nn.Conv2d(in_channels=128, out_channels=512,
+                                             kernel_size=1, stride=1, padding=0)
+                                   )
+        self.conv2 = nn.Sequential(nn.Conv2d(in_channels=1024, out_channels=256, kernel_size=3, stride=1, padding=1),
+                                   nn.BatchNorm2d(256),
+                                   nn.ReLU(),
+                                   nn.Conv2d(in_channels=256, out_channels=1024,
+                                             kernel_size=1, stride=1, padding=0)
+                                   )
+        self.SE1 = nn.Sequential(
+            nn.Conv2d(1024, 256, 1),
+            nn.ReLU(),
+            nn.Conv2d(256, 1024, 1),
+            nn.Sigmoid()
+        )
+        self.SE2 = nn.Sequential(
+            nn.Conv2d(2048, 512, 1),
+            nn.ReLU(),
+            nn.Conv2d(512, 2048, 1),
+            nn.Sigmoid()
+        )
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         x = self.visible.conv1(x)
@@ -135,17 +166,35 @@ class backbone(nn.Module):
         x = self.visible.relu(x)
         x = self.visible.maxpool(x)
         x = self.visible.layer1(x)
-        x = self.snl1(x)
+        #x = self.snl1(x)
         x = self.visible.layer2(x)
-        x = self.snl2(x)
+        x_map2 = self.conv1(x)
+        x_map2 = torch.mean(x_map2, dim=1, keepdim=True)
+        x_map2 = self.sigmoid(x_map2)
+        #x = self.snl2(x)
         x = self.visible.layer3(x)
-        x = self.snl3(x)
+        x_map3 = self.conv2(x)
+        x_map3 = torch.mean(x_map3, dim=1, keepdim=True)
+        x_map3 = self.sigmoid(x_map3)
+        x3_pool = self.visible.avgpool(x)
+        x3_cmap = self.SE1(x3_pool)
+        x3_cwei = torch.mul(x3_cmap, x)
+        x3 = torch.mul(x3_cwei, x_map2)
+
+        #x3 = self.snl3(x)
+        x3 = self.visible.avgpool(x3)
+        x3 = x3.view(x.size(0), x.size(1))
+
         x = self.visible.layer4(x)
-        x = self.snl4(x)
+        x_pool = self.visible.avgpool(x)
+        x_cmap = self.SE2(x_pool)
+        x_cwei = torch.mul(x_cmap, x)
+        x = torch.mul(x_cwei, x_map3)
+        #x = self.snl4(x)
         x = self.visible.avgpool(x)
         x = x.view(x.size(0), x.size(1))
         # x = self.dropout(x)
-        return x
+        return x, x3
 
 
 class backbone_weight(nn.Module):
@@ -195,18 +244,24 @@ class embed_net(nn.Module):
         self.bn.apply(weights_init_kaiming)
         self.fc = nn.Linear(self.dim, class_num)
         self.fc.apply(weights_init_classifier)
+        self.bn3 = nn.BatchNorm1d(1024)
+        self.bn3.apply(weights_init_kaiming)
+        self.fc3 = nn.Linear(1024, class_num)
+        self.fc3.apply(weights_init_classifier)
 
     def forward(self, x1):
         if self.weight:
             yt, w = self.backbone(x1)
         else:
-            yt = self.backbone(x1)
+            yt, yt3 = self.backbone(x1)
         yi = self.bn(yt)
         out = self.fc(yi)
+        yi3 = self.bn3(yt3)
+        out3 = self.fc3(yi3)
         if self.weight:
             return out, yt, yi, w
         else:
-            return out, yt, yi
+            return out, yt, yi, out3, yt3, yi3
 
 # debug model structure
 

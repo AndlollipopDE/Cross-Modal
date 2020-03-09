@@ -176,16 +176,14 @@ def extract_gall_feat(gall_loader):
     print('Extracting Gallery Feature...')
     start = time.time()
     ptr = 0
-    gall_feat = np.zeros((ngall, final_dim))
-    gall_feat_pool = np.zeros((ngall, final_dim))
+    gall_feat = np.zeros((ngall, final_dim+1024))
+    gall_feat_pool = np.zeros((ngall, final_dim+1024))
     with torch.no_grad():
         for batch_idx, (input, label) in enumerate(gall_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            if if_weight:
-                _, _, feat, _ = net(input)
-            else:
-                _, _, feat = net(input)
+            _, _, feat, _, _, feat3 = net(input)
+            feat = torch.cat((feat, feat3), dim=1)
             gall_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             gall_feat_pool[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
@@ -198,16 +196,14 @@ def extract_query_feat(query_loader):
     print('Extracting Query Feature...')
     start = time.time()
     ptr = 0
-    query_feat = np.zeros((nquery, final_dim))
-    query_feat_pool = np.zeros((nquery, final_dim))
+    query_feat = np.zeros((nquery, final_dim+1024))
+    query_feat_pool = np.zeros((nquery, final_dim+1024))
     with torch.no_grad():
         for batch_idx, (input, label) in enumerate(query_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            if if_weight:
-                _, _, feat, _ = net(input)
-            else:
-                _, _, feat = net(input)
+            _, _, feat, _, _, feat3 = net(input)
+            feat = torch.cat((feat, feat3), dim=1)
             query_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             query_feat_pool[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
@@ -286,7 +282,7 @@ elif dataset == 'sysu':
         print('FC: top-1: {:.2%} | top-5: {:.2%} | top-10: {:.2%}| top-20: {:.2%}'.format(
             cmc[0], cmc[4], cmc[9], cmc[19]))
         print('mAP: {:.2%}'.format(mAP))
-        print('POOL5: top-1: {:.2%} | top-5: {:.2%} | top-10: {:.2%}| top-20: {:.2%}'.format(
+        print('FC: top-1: {:.2%} | top-5: {:.2%} | top-10: {:.2%}| top-20: {:.2%}'.format(
             cmc_pool[0], cmc_pool[4], cmc_pool[9], cmc_pool[19]))
         print('mAP: {:.2%}'.format(mAP_pool))
 
@@ -299,6 +295,6 @@ elif dataset == 'sysu':
     print('FC: top-1: {:.2%} | top-5: {:.2%} | top-10: {:.2%}| top-20: {:.2%}'.format(
         cmc[0], cmc[4], cmc[9], cmc[19]))
     print('mAP: {:.2%}'.format(mAP))
-    print('POOL5: top-1: {:.2%} | top-5: {:.2%} | top-10: {:.2%}| top-20: {:.2%}'.format(
+    print('FC: top-1: {:.2%} | top-5: {:.2%} | top-10: {:.2%}| top-20: {:.2%}'.format(
         cmc_pool[0], cmc_pool[4], cmc_pool[9], cmc_pool[19]))
     print('mAP: {:.2%}'.format(mAP_pool))

@@ -18,8 +18,6 @@ from utils import *
 from tripletloss import TripletLoss
 from RandomErasing import RandomErasing
 from idloss import CrossEntropySmooth
-from centerloss import CenterLoss
-from wloss import WLoss
 
 parser = argparse.ArgumentParser(description='PyTorch Cross-Modality Training')
 parser.add_argument('--dataset', default='sysu',
@@ -204,12 +202,10 @@ if len(args.resume) > 0:
 
 if args.method == 'id':
     criterion = CrossEntropySmooth(n_class)
-    #criterion = nn.CrossEntropyLoss()
     criterion.to(device)
 
 
 #**********************#
-
 
 if args.optim == 'sgd':
     optimizer = optim.SGD([
@@ -244,20 +240,13 @@ def train(epoch):
     correct = 0
     total = 0
     # New
-    tripletloss_global = TripletLoss(args.batch_size, 4, cross_modal=False)
-    tripletloss_cross = TripletLoss(args.batch_size, 4, cross_modal=True)
-    #klloss = nn.KLDivLoss(size_average = False)
-    #centerloss = CenterLoss(395,2048)
-    #logsoftmax = nn.LogSoftmax(dim = 1)
+    tripletloss_global = TripletLoss(args.batch_size, 4)
     softmax = nn.Softmax(dim=1)
-    if if_weight:
-        weight_loss = WLoss(args.batch_size, 4)
 
     # switch to train mode
     net.train()
     end = time.time()
     for batch_idx, (input1, input2, label1, label2) in enumerate(trainloader):
-        #change_flag = False
         input1 = Variable(input1.cuda())
         input2 = Variable(input2.cuda())
         label1 = Variable(label1.cuda())
@@ -266,29 +255,24 @@ def train(epoch):
         inputs = torch.cat((input1, input2), 0)
 
         data_time.update(time.time() - end)
-        if if_weight:
-            outputs, feat, _, w = net(inputs)
-        else:
-            outputs, feat, _ = net(inputs)
+        outputs, feat, _, outputs3, feat3, _ = net(inputs)
         if args.method == 'id':
             loss = criterion(outputs, labels)
-            # Klloss
-            #outputs_rgb = outputs[0:32,:]
-            #outputs_ir = outputs[32:,:]
-            #outputs_ir2 = logsoftmax(outputs_ir)
-            #outputs_rgb2 = softmax(outputs_rgb)
-            #KLLoss2 = klloss(outputs_ir2,outputs_rgb2)
+            loss = loss + criterion(outputs3, labels)
             score = softmax(outputs)
+
+            score3 = softmax(outputs3)
+
             _, predicted = torch.max(score.data, 1)
             correct += predicted.eq(labels).sum().item()
-        #feat = 1.*feat / (torch.norm(feat, 2, 1, keepdim=True).expand_as(feat) + 1e-10)
-        triloss = tripletloss_cross(
-            feat, labels) + tripletloss_global(feat, labels)
-        if if_weight:
-            wloss = weight_loss(w, labels)
-            loss = triloss + loss + wloss
-        else:
-            loss = triloss + loss
+            _, predicted3 = torch.max(score3.data, 1)
+            correct3 = predicted3.eq(labels).sum().item()
+            correct = correct + correct3
+        triloss = tripletloss_global(
+            feat, labels)
+        triloss3 = tripletloss_global(
+            feat3, labels)
+        loss = triloss + loss + triloss3
 
         optimizer.zero_grad()
         loss.backward()
@@ -308,7 +292,7 @@ def train(epoch):
                   'Loss: {train_loss.val:.4f} ({train_loss.avg:.4f}) '
                   'Accu: {:.2f}' .format(
                       epoch, batch_idx, len(trainloader), current_lr,
-                      100.*correct/total, batch_time=batch_time,
+                      50.*correct/total, batch_time=batch_time,
                       data_time=data_time, train_loss=train_loss))
 
 
@@ -318,15 +302,13 @@ def test(epoch):
     print('Extracting Gallery Feature...')
     start = time.time()
     ptr = 0
-    gall_feat = np.zeros((ngall, final_dim))
+    gall_feat = np.zeros((ngall, final_dim+1024))
     with torch.no_grad():
         for batch_idx, (input, label) in enumerate(gall_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            if if_weight:
-                _, _, feat, _ = net(input)
-            else:
-                _, _, feat = net(input)
+            _, _, feat, _, _, feat3 = net(input)
+            feat = torch.cat((feat, feat3), dim=1)
             gall_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))
@@ -336,15 +318,13 @@ def test(epoch):
     print('Extracting Query Feature...')
     start = time.time()
     ptr = 0
-    query_feat = np.zeros((nquery, final_dim))
+    query_feat = np.zeros((nquery, final_dim+1024))
     with torch.no_grad():
         for batch_idx, (input, label) in enumerate(query_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            if if_weight:
-                _, _, feat, _ = net(input)
-            else:
-                _, _, feat = net(input)
+            _, _, feat, _, _, feat3 = net(input)
+            feat = torch.cat((feat, feat3), dim=1)
             query_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))

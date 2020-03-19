@@ -17,6 +17,7 @@ from model import embed_net
 from utils import *
 import time
 import scipy.io as scio
+from model import Normalize
 
 parser = argparse.ArgumentParser(description='PyTorch Cross-Modality Training')
 parser.add_argument('--dataset', default='sysu',
@@ -173,6 +174,7 @@ elif args.arch == 'resnet18':
 
 def extract_gall_feat(gall_loader):
     net.eval()
+    l2_norm = Normalize()
     print('Extracting Gallery Feature...')
     start = time.time()
     ptr = 0
@@ -184,6 +186,7 @@ def extract_gall_feat(gall_loader):
             input = Variable(input.cuda())
             _, _, feat, _, _, feat3 = net(input)
             feat = torch.cat((feat, feat3), dim=1)
+            feat = l2_norm(feat)
             gall_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             gall_feat_pool[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
@@ -193,6 +196,7 @@ def extract_gall_feat(gall_loader):
 
 def extract_query_feat(query_loader):
     net.eval()
+    l2_norm = Normalize()
     print('Extracting Query Feature...')
     start = time.time()
     ptr = 0
@@ -204,6 +208,7 @@ def extract_query_feat(query_loader):
             input = Variable(input.cuda())
             _, _, feat, _, _, feat3 = net(input)
             feat = torch.cat((feat, feat3), dim=1)
+            feat = l2_norm(feat)
             query_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             query_feat_pool[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
@@ -246,18 +251,6 @@ elif dataset == 'sysu':
 
         gall_feat, gall_feat_pool = extract_gall_feat(trial_gall_loader)
 
-        gall_feat = 1.*gall_feat / \
-            np.repeat(np.linalg.norm(gall_feat, 2, 1, True),
-                      gall_feat.shape[1], 1)
-        gall_feat_pool = 1.*gall_feat_pool / \
-            np.repeat(np.linalg.norm(gall_feat_pool, 2, 1, True),
-                      gall_feat_pool.shape[1], 1)
-        query_feat = 1.*query_feat / \
-            np.repeat(np.linalg.norm(query_feat, 2, 1, True),
-                      query_feat.shape[1], 1)
-        query_feat_pool = 1.*query_feat_pool / \
-            np.repeat(np.linalg.norm(query_feat_pool, 2, 1, True),
-                      query_feat_pool.shape[1], 1)
         # fc feature
         distmat = np.matmul(query_feat, np.transpose(gall_feat))
         cmc, mAP = eval_sysu(-distmat, query_label,

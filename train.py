@@ -18,6 +18,7 @@ from utils import *
 from tripletloss import TripletLoss
 from RandomErasing import RandomErasing
 from idloss import CrossEntropySmooth
+from model import Normalize
 
 parser = argparse.ArgumentParser(description='PyTorch Cross-Modality Training')
 parser.add_argument('--dataset', default='sysu',
@@ -30,7 +31,7 @@ parser.add_argument('--arch', default='resnet50', type=str,
 parser.add_argument('--resume', '-r', default='', type=str,
                     help='resume from checkpoint')
 parser.add_argument('--test-only', action='store_true', help='test only')
-parser.add_argument('--model_path', default='./save_model/', type=str,
+parser.add_argument('--model_path', default='../Log/save_model/', type=str,
                     help='model save path')
 parser.add_argument('--save_epoch', default=20, type=int,
                     metavar='s', help='save model every 10 epochs')
@@ -201,7 +202,8 @@ if len(args.resume) > 0:
         print('==> no checkpoint found at {}'.format(args.resume))
 
 if args.method == 'id':
-    criterion = CrossEntropySmooth(n_class)
+    #criterion = CrossEntropySmooth(n_class)
+    criterion = nn.CrossEntropyLoss()
     criterion.to(device)
 
 
@@ -242,6 +244,7 @@ def train(epoch):
     # New
     tripletloss_global = TripletLoss(args.batch_size, 4)
     softmax = nn.Softmax(dim=1)
+    l2norm = Normalize()
 
     # switch to train mode
     net.train()
@@ -268,6 +271,8 @@ def train(epoch):
             _, predicted3 = torch.max(score3.data, 1)
             correct3 = predicted3.eq(labels).sum().item()
             correct = correct + correct3
+        feat = l2norm(feat)
+        feat3 = l2norm(feat3)
         triloss = tripletloss_global(
             feat, labels)
         triloss3 = tripletloss_global(
@@ -298,6 +303,7 @@ def train(epoch):
 
 def test(epoch):
     # switch to evaluation mode
+    l2norm = Normalize()
     net.eval()
     print('Extracting Gallery Feature...')
     start = time.time()
@@ -309,6 +315,7 @@ def test(epoch):
             input = Variable(input.cuda())
             _, _, feat, _, _, feat3 = net(input)
             feat = torch.cat((feat, feat3), dim=1)
+            feat = l2norm(feat)
             gall_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))
@@ -325,17 +332,18 @@ def test(epoch):
             input = Variable(input.cuda())
             _, _, feat, _, _, feat3 = net(input)
             feat = torch.cat((feat, feat3), dim=1)
+            feat = l2norm(feat)
             query_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
     print('Extracting Time:\t {:.3f}'.format(time.time()-start))
 
     start = time.time()
     # compute the similarity
-    gall_feat = 1.*gall_feat / \
-        np.repeat(np.linalg.norm(gall_feat, 2, 1, True), gall_feat.shape[1], 1)
-    query_feat = 1.*query_feat / \
-        np.repeat(np.linalg.norm(query_feat, 2, 1, True),
-                  query_feat.shape[1], 1)
+    # gall_feat = 1.*gall_feat / \
+    #     np.repeat(np.linalg.norm(gall_feat, 2, 1, True), gall_feat.shape[1], 1)
+    # query_feat = 1.*query_feat / \
+    #     np.repeat(np.linalg.norm(query_feat, 2, 1, True),
+    #               query_feat.shape[1], 1)
     distmat = np.matmul(query_feat, np.transpose(gall_feat))
 
     # evaluation

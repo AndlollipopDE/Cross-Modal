@@ -138,13 +138,13 @@ class backbone(nn.Module):
                                    nn.BatchNorm2d(128),
                                    nn.ReLU(),
                                    nn.Conv2d(in_channels=128, out_channels=512,
-                                             kernel_size=1, stride=1, padding=0)
+                                             kernel_size=3, stride=1, padding=1)
                                    )
         self.conv2 = nn.Sequential(nn.Conv2d(in_channels=1024, out_channels=256, kernel_size=3, stride=1, padding=1),
                                    nn.BatchNorm2d(256),
                                    nn.ReLU(),
                                    nn.Conv2d(in_channels=256, out_channels=1024,
-                                             kernel_size=1, stride=1, padding=0)
+                                             kernel_size=3, stride=1, padding=1)
                                    )
         self.SE1 = nn.Sequential(
             nn.Conv2d(1024, 256, 1),
@@ -168,30 +168,30 @@ class backbone(nn.Module):
         x = self.visible.layer1(x)
         #x = self.snl1(x)
         x = self.visible.layer2(x)
-        x_map2 = self.conv1(x)
-        x_map2 = torch.mean(x_map2, dim=1, keepdim=True)
-        x_map2 = self.sigmoid(x_map2)
-        #x = self.snl2(x)
+        # x_map2 = self.conv1(x)
+        # x_map2 = torch.mean(x_map2, dim=1, keepdim=True)
+        # x_map2 = self.sigmoid(x_map2)
+        # #x = self.snl2(x)
         x = self.visible.layer3(x)
-        x_map3 = self.conv2(x)
-        x_map3 = torch.mean(x_map3, dim=1, keepdim=True)
-        x_map3 = self.sigmoid(x_map3)
+        # x_map3 = self.conv2(x)
+        # x_map3 = torch.mean(x_map3, dim=1, keepdim=True)
+        # x_map3 = self.sigmoid(x_map3)
         x3_pool = self.visible.avgpool(x)
         x3_cmap = self.SE1(x3_pool)
         x3_cwei = torch.mul(x3_cmap, x)
-        x3 = torch.mul(x3_cwei, x_map2)
+        #x3 = torch.mul(x3_cwei, x_map2)
 
         #x3 = self.snl3(x)
-        x3 = self.visible.avgpool(x3)
+        x3 = self.visible.avgpool(x3_cwei)
         x3 = x3.view(x.size(0), x.size(1))
 
         x = self.visible.layer4(x)
         x_pool = self.visible.avgpool(x)
         x_cmap = self.SE2(x_pool)
         x_cwei = torch.mul(x_cmap, x)
-        x = torch.mul(x_cwei, x_map3)
+        #x = torch.mul(x_cwei, x_map3)
         #x = self.snl4(x)
-        x = self.visible.avgpool(x)
+        x = self.visible.avgpool(x_cwei)
         x = x.view(x.size(0), x.size(1))
         # x = self.dropout(x)
         return x, x3

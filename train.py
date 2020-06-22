@@ -17,8 +17,8 @@ from model import embed_net
 from utils import *
 from tripletloss import TripletLoss
 from RandomErasing import RandomErasing
-from idloss import CrossEntropySmooth
 from model import Normalize
+from closs import CovLoss
 
 parser = argparse.ArgumentParser(description='PyTorch Cross-Modality Training')
 parser.add_argument('--dataset', default='sysu',
@@ -58,17 +58,12 @@ parser.add_argument('--trial', default=1, type=int,
 parser.add_argument('--gpu', default='0', type=str,
                     help='gpu device ids for CUDA_VISIBLE_DEVICES')
 parser.add_argument('--mode', default='all', type=str, help='all or indoor')
-parser.add_argument('--use_weight', action='store_true', help='if use weight')
 
 args = parser.parse_args()
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 np.random.seed(0)
 
-if_weight = args.use_weight
-if if_weight:
-    final_dim = 2047
-else:
-    final_dim = 2048
+final_dim = 2048
 dataset = args.dataset
 if dataset == 'sysu':
     data_path = './SYSUMM01/'
@@ -126,7 +121,7 @@ transform_test = transforms.Compose([
     normalize,
 ])
 
-end = time.time()
+end = time.clock()
 if dataset == 'sysu':
     # training set
     trainset = SYSUData(data_path,  transform=transform_train)
@@ -180,12 +175,12 @@ print('  ------------------------------')
 print('  query    | {:5d} | {:8d}'.format(len(np.unique(query_label)), nquery))
 print('  gallery  | {:5d} | {:8d}'.format(len(np.unique(gall_label)), ngall))
 print('  ------------------------------')
-print('Data Loading Time:\t {:.3f}'.format(time.time()-end))
+print('Data Loading Time:\t {:.3f}'.format(time.clock()-end))
 
 
 print('==> Building model..')
 net = embed_net(final_dim, n_class, drop=args.drop,
-                arch=args.arch, weight_flag=if_weight)
+                arch=args.arch)
 net.to(device)
 cudnn.benchmark = True
 
@@ -202,7 +197,6 @@ if len(args.resume) > 0:
         print('==> no checkpoint found at {}'.format(args.resume))
 
 if args.method == 'id':
-    #criterion = CrossEntropySmooth(n_class)
     criterion = nn.CrossEntropyLoss()
     criterion.to(device)
 
@@ -243,12 +237,13 @@ def train(epoch):
     total = 0
     # New
     tripletloss_global = TripletLoss(args.batch_size, 4)
+    Covloss = CovLoss(batchsize=args.batch_size, num_instance=4)
     softmax = nn.Softmax(dim=1)
     l2norm = Normalize()
 
     # switch to train mode
     net.train()
-    end = time.time()
+    end = time.clock()
     for batch_idx, (input1, input2, label1, label2) in enumerate(trainloader):
         input1 = Variable(input1.cuda())
         input2 = Variable(input2.cuda())
@@ -257,7 +252,7 @@ def train(epoch):
         labels = torch.cat((label1, label2), 0)
         inputs = torch.cat((input1, input2), 0)
 
-        data_time.update(time.time() - end)
+        data_time.update(time.clock() - end)
         outputs, feat, _, outputs3, feat3, _ = net(inputs)
         if args.method == 'id':
             loss = criterion(outputs, labels)
@@ -273,11 +268,13 @@ def train(epoch):
             correct = correct + correct3
         feat = l2norm(feat)
         feat3 = l2norm(feat3)
+        closs = Covloss(feat)
+        closs3 = Covloss(feat3)
         triloss = tripletloss_global(
             feat, labels)
         triloss3 = tripletloss_global(
             feat3, labels)
-        loss = triloss + loss + triloss3
+        loss = triloss + loss + triloss3 + closs + closs3
 
         optimizer.zero_grad()
         loss.backward()
@@ -287,8 +284,8 @@ def train(epoch):
         total += labels.size(0)
 
         # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
+        batch_time.update(time.clock() - end)
+        end = time.clock()
         if batch_idx % 10 == 0:
             print('Epoch: [{}][{}/{}] '
                   'Time: {batch_time.val:.3f} ({batch_time.avg:.3f}) '
@@ -306,7 +303,7 @@ def test(epoch):
     l2norm = Normalize()
     net.eval()
     print('Extracting Gallery Feature...')
-    start = time.time()
+    start = time.clock()
     ptr = 0
     gall_feat = np.zeros((ngall, final_dim+1024))
     with torch.no_grad():
@@ -314,16 +311,17 @@ def test(epoch):
             batch_num = input.size(0)
             input = Variable(input.cuda())
             _, _, feat, _, _, feat3 = net(input)
-            feat = torch.cat((feat, feat3), dim=1)
             feat = l2norm(feat)
+            feat3 = l2norm(feat3)
+            feat = torch.cat((feat, feat3), dim=1)
             gall_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
-    print('Extracting Time:\t {:.3f}'.format(time.time()-start))
+    print('Extracting Time:\t {:.3f}'.format(time.clock()-start))
 
     # switch to evaluation mode
     net.eval()
     print('Extracting Query Feature...')
-    start = time.time()
+    start = time.clock()
     ptr = 0
     query_feat = np.zeros((nquery, final_dim+1024))
     with torch.no_grad():
@@ -331,19 +329,14 @@ def test(epoch):
             batch_num = input.size(0)
             input = Variable(input.cuda())
             _, _, feat, _, _, feat3 = net(input)
-            feat = torch.cat((feat, feat3), dim=1)
             feat = l2norm(feat)
+            feat3 = l2norm(feat3)
+            feat = torch.cat((feat, feat3), dim=1)
             query_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
-    print('Extracting Time:\t {:.3f}'.format(time.time()-start))
+    print('Extracting Time:\t {:.3f}'.format(time.clock()-start))
 
-    start = time.time()
-    # compute the similarity
-    # gall_feat = 1.*gall_feat / \
-    #     np.repeat(np.linalg.norm(gall_feat, 2, 1, True), gall_feat.shape[1], 1)
-    # query_feat = 1.*query_feat / \
-    #     np.repeat(np.linalg.norm(query_feat, 2, 1, True),
-    #               query_feat.shape[1], 1)
+    start = time.clock()
     distmat = np.matmul(query_feat, np.transpose(gall_feat))
 
     # evaluation
@@ -352,7 +345,7 @@ def test(epoch):
     elif dataset == 'sysu':
         cmc, mAP = eval_sysu(-distmat, query_label,
                              gall_label, query_cam, gall_cam)
-    print('Evaluation Time:\t {:.3f}'.format(time.time()-start))
+    print('Evaluation Time:\t {:.3f}'.format(time.clock()-start))
     return cmc, mAP
 
 

@@ -53,16 +53,11 @@ parser.add_argument('--trial', default=1, type=int,
 parser.add_argument('--gpu', default='0', type=str,
                     help='gpu device ids for CUDA_VISIBLE_DEVICES')
 parser.add_argument('--mode', default='all', type=str, help='all or indoor')
-parser.add_argument('--use_weight', action='store_true', help='if use weight')
 
 args = parser.parse_args()
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
-if_weight = args.use_weight
-if if_weight:
-    final_dim = 2047
-else:
-    final_dim = 2048
+final_dim = 2048
 np.random.seed(1)
 dataset = args.dataset
 if dataset == 'sysu':
@@ -80,7 +75,7 @@ start_epoch = 0
 
 print('==> Building model..')
 net = embed_net(final_dim, n_class, drop=args.drop,
-                arch=args.arch, weight_flag=if_weight)
+                arch=args.arch)
 net.to(device)
 cudnn.benchmark = True
 
@@ -185,8 +180,9 @@ def extract_gall_feat(gall_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
             _, _, feat, _, _, feat3 = net(input)
-            feat = torch.cat((feat, feat3), dim=1)
             feat = l2_norm(feat)
+            feat3 = l2_norm(feat3)
+            feat = torch.cat((feat, feat3), dim=1)
             gall_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             gall_feat_pool[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
@@ -207,8 +203,9 @@ def extract_query_feat(query_loader):
             batch_num = input.size(0)
             input = Variable(input.cuda())
             _, _, feat, _, _, feat3 = net(input)
-            feat = torch.cat((feat, feat3), dim=1)
             feat = l2_norm(feat)
+            feat3 = l2_norm(feat3)
+            feat = torch.cat((feat, feat3), dim=1)
             query_feat[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             query_feat_pool[ptr:ptr+batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num

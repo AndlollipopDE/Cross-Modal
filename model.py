@@ -85,7 +85,7 @@ class backbone(nn.Module):
         x_pool = self.visible.avgpool(x)
         x_cmap = self.SE2(x_pool)
         x_cwei = torch.mul(x_cmap, x)
-        x = self.visible.avgpool(x)
+        x = self.visible.avgpool(x_cwei)
         x = x.view(x.size(0), x.size(1))
 
         return x, x3

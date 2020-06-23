@@ -8,11 +8,11 @@ class CovLoss(nn.Module):
         self.margin = margin
         self.batchsize = batchsize
         self.num_instance = num_instance
-        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
         return
 
     def forward(self, feat):
-        feat = self.relu(feat)
+        feat = self.sigmoid(feat)
         loss = self.compute_indep(feat)
         return loss
 
